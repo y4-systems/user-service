@@ -41,6 +41,8 @@ func main() {
 
 	// Setup routes with CORS middleware
 	mux := http.NewServeMux()
+	// Serve documentation files from ./docs at /docs/
+	mux.Handle("/docs/", http.StripPrefix("/docs/", http.FileServer(http.Dir("./docs"))))
 	mux.HandleFunc("/swagger.json", swaggerJSONHandler)
 	mux.HandleFunc("/students/", studentsHandler)
 	mux.HandleFunc("/auth/register", registerHandler)
@@ -150,22 +152,55 @@ func swaggerJSONHandler(w http.ResponseWriter, r *http.Request) {
                 }
             }
         },
-        "/students/{id}": {
-            "get": {
-                "description": "Get student by ID",
-                "produces": ["application/json"],
-                "tags": ["Students"],
-                "summary": "Get student by ID",
+		"/students/{id}": {
+			"get": {
+				"description": "Get student by ID",
+				"produces": ["application/json"],
+				"tags": ["Students"],
+				"summary": "Get student by ID",
 				"parameters": [
 					{"name": "id", "in": "path", "required": true, "type": "string", "description": "Student ID", "default": "699df7593e8c1131b613628d"}
 				],
-                "responses": {
-                    "200": {"description": "OK", "schema": {"$ref": "#/definitions/RegisterResponse"}},
-                    "400": {"description": "Bad Request", "schema": {"$ref": "#/definitions/ErrorResponse"}},
-                    "404": {"description": "Not Found", "schema": {"$ref": "#/definitions/ErrorResponse"}}
-                }
-            }
-        }
+				"responses": {
+					"200": {"description": "OK", "schema": {"$ref": "#/definitions/RegisterResponse"}},
+					"400": {"description": "Bad Request", "schema": {"$ref": "#/definitions/ErrorResponse"}},
+					"404": {"description": "Not Found", "schema": {"$ref": "#/definitions/ErrorResponse"}}
+				}
+			},
+			"put": {
+				"description": "Update a student by ID",
+				"consumes": ["application/json"],
+				"produces": ["application/json"],
+				"tags": ["Students"],
+				"summary": "Update student by ID",
+				"parameters": [
+					{"name": "id", "in": "path", "required": true, "type": "string", "description": "Student ID", "default": "699df7593e8c1131b613628d"},
+					{"name": "student", "in": "body", "required": true, "schema": {"$ref": "#/definitions/RegisterRequest"}}
+				],
+				"responses": {
+					"200": {"description": "Updated", "schema": {"$ref": "#/definitions/RegisterResponse"}},
+					"400": {"description": "Bad Request", "schema": {"$ref": "#/definitions/ErrorResponse"}},
+					"404": {"description": "Not Found", "schema": {"$ref": "#/definitions/ErrorResponse"}},
+					"500": {"description": "Internal Server Error", "schema": {"$ref": "#/definitions/ErrorResponse"}}
+				}
+			}
+		},
+			"delete": {
+				"description": "Delete a student by ID",
+				"produces": ["application/json"],
+				"tags": ["Students"],
+				"summary": "Delete student by ID",
+				"parameters": [
+					{"name": "id", "in": "path", "required": true, "type": "string", "description": "Student ID", "default": "699df7593e8c1131b613628d"}
+				],
+				"responses": {
+					"204": {"description": "No Content"},
+					"400": {"description": "Bad Request", "schema": {"$ref": "#/definitions/ErrorResponse"}},
+					"404": {"description": "Not Found", "schema": {"$ref": "#/definitions/ErrorResponse"}},
+					"500": {"description": "Internal Server Error", "schema": {"$ref": "#/definitions/ErrorResponse"}}
+				}
+			}
+		}
     },
     "definitions": {
         "RegisterRequest": {
@@ -217,8 +252,8 @@ func swaggerUIHandler(w http.ResponseWriter, r *http.Request) {
         <script src="https://unpkg.com/swagger-ui-dist/swagger-ui-bundle.js"></script>
         <script>
             window.onload = function() {
-                const ui = SwaggerUIBundle({
-                    url: window.location.origin + '/swagger.json',
+				const ui = SwaggerUIBundle({
+					url: window.location.origin + '/docs/swagger.yaml',
                     dom_id: '#swagger-ui',
                     deepLinking: true,
                     presets: [SwaggerUIBundle.presets.apis],
@@ -255,15 +290,8 @@ func objectIDToHex(id interface{}) string {
 	return fmt.Sprintf("%v", id)
 }
 
-// getStudentHandler returns a student by ID
-func getStudentHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusMethodNotAllowed)
-		json.NewEncoder(w).Encode(types.ErrorResponse{Error: "Method Not Allowed"})
-		return
-	}
-
+// studentsHandler handles GET and PUT for /students/{id}
+func studentsHandler(w http.ResponseWriter, r *http.Request) {
 	// extract id from path /students/{id}
 	id := strings.TrimPrefix(r.URL.Path, "/students/")
 	if id == "" {
@@ -286,26 +314,114 @@ func getStudentHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	collection := config.GetDB().Collection("students")
-	var student types.Student
-	err = collection.FindOne(ctx, bson.M{"_id": oid}).Decode(&student)
-	if err != nil {
+
+	switch r.Method {
+		case http.MethodDelete:
+			deleted, err := deleteStudent(ctx, collection, oid)
+			if err != nil {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusInternalServerError)
+				json.NewEncoder(w).Encode(types.ErrorResponse{Error: "Failed to delete student"})
+				return
+			}
+			if deleted == 0 {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusNotFound)
+				json.NewEncoder(w).Encode(types.ErrorResponse{Error: "Student not found"})
+				return
+			}
+			w.WriteHeader(http.StatusNoContent)
+			return
+	case http.MethodGet:
+		var student types.Student
+		err = collection.FindOne(ctx, bson.M{"_id": oid}).Decode(&student)
+		if err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusNotFound)
+			json.NewEncoder(w).Encode(types.ErrorResponse{Error: "Student not found"})
+			return
+		}
+		resp := types.RegisterResponse{
+			ID:    student.ID.Hex(),
+			Email: student.Email,
+			Name:  student.Name,
+			Phone: student.Phone,
+		}
 		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusNotFound)
-		json.NewEncoder(w).Encode(types.ErrorResponse{Error: "Student not found"})
-		return
-	}
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(resp)
 
-	// prepare response
-	resp := types.RegisterResponse{
-		ID:    student.ID.Hex(),
-		Email: student.Email,
-		Name:  student.Name,
-		Phone: student.Phone,
-	}
+	case http.MethodPut:
+		var req types.RegisterRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(types.ErrorResponse{Error: "Invalid request body"})
+			return
+		}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(resp)
+		// Simple validation: require name/email/phone (password optional for update)
+		if req.Email == "" || req.Name == "" || req.Phone == "" {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(types.ErrorResponse{Error: "Missing required fields"})
+			return
+		}
+
+		update := bson.M{"$set": bson.M{"email": req.Email, "name": req.Name, "phone": req.Phone}}
+		if req.Password != "" {
+			update["$set"].(bson.M)["password"] = req.Password
+		}
+
+		res, err := collection.UpdateOne(ctx, bson.M{"_id": oid}, update)
+		if err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(types.ErrorResponse{Error: "Failed to update student"})
+			return
+		}
+		if res.MatchedCount == 0 {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusNotFound)
+			json.NewEncoder(w).Encode(types.ErrorResponse{Error: "Student not found"})
+			return
+		}
+
+		// return updated document
+		var student types.Student
+		err = collection.FindOne(ctx, bson.M{"_id": oid}).Decode(&student)
+		if err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(types.ErrorResponse{Error: "Failed to fetch updated student"})
+			return
+		}
+		resp := types.RegisterResponse{
+			ID:    student.ID.Hex(),
+			Email: student.Email,
+			Name:  student.Name,
+			Phone: student.Phone,
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(resp)
+
+	default:
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		json.NewEncoder(w).Encode(types.ErrorResponse{Error: "Method Not Allowed"})
+	}
+}
+
+// deleteStudent performs deletion of a student document
+func deleteStudent(ctx context.Context, collection interface{}, oid primitive.ObjectID) (int64, error) {
+	// use the concrete collection type from config.GetDB().Collection
+	col := config.GetDB().Collection("students")
+	res, err := col.DeleteOne(ctx, bson.M{"_id": oid})
+	if err != nil {
+		return 0, err
+	}
+	return res.DeletedCount, nil
 }
 
 // registerHandler godoc

@@ -1,0 +1,4 @@
+nohup: ignoring input
+Successfully connected to MongoDB
+Server is running on http://localhost:8080
+API Documentation available at http://localhost:8080/swagger/index.html
