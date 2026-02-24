@@ -25,3 +25,9 @@ go.work
 
 # Generated files
 docs/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+

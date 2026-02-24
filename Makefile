@@ -8,6 +8,8 @@ help:
 	@echo "  make swagger   - Install and generate Swagger documentation"
 	@echo "  make clean     - Remove generated files"
 	@echo ""
+	@echo "Note: Configure MongoDB Atlas in .env file"
+	@echo ""
 
 install:
 	go mod download
