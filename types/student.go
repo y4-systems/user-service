@@ -10,12 +10,32 @@ type RegisterRequest struct {
 	Phone    string `json:"phone" binding:"required"`
 }
 
+// LoginRequest represents the login request
+type LoginRequest struct {
+	Email    string `json:"email" binding:"required,email"`
+	Password string `json:"password" binding:"required"`
+}
+
 // RegisterResponse represents the registration response
 type RegisterResponse struct {
 	ID    string `json:"id"`
 	Email string `json:"email"`
 	Name  string `json:"name"`
 	Phone string `json:"phone"`
+}
+
+// LoginResponse represents the login response
+type LoginResponse struct {
+	Token string             `json:"token"`
+	User  RegisterResponse   `json:"user"`
+	ExpiresIn string         `json:"expiresIn"`
+}
+
+// ValidateResponse represents the token validation response
+type ValidateResponse struct {
+	ID    string `json:"id"`
+	Email string `json:"email"`
+	Name  string `json:"name"`
 }
 
 // Student represents a student in MongoDB

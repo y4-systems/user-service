@@ -44,8 +44,10 @@ func main() {
 	// Serve documentation files from ./docs at /docs/
 	mux.Handle("/docs/", http.StripPrefix("/docs/", http.FileServer(http.Dir("./docs"))))
 	mux.HandleFunc("/swagger.json", swaggerJSONHandler)
-	mux.HandleFunc("/students/", studentsHandler)
+	mux.HandleFunc("/students/", protectedMiddleware(studentsHandler))
 	mux.HandleFunc("/auth/register", registerHandler)
+	mux.HandleFunc("/auth/login", loginHandler)
+	mux.HandleFunc("/auth/validate", protectedMiddleware(validateHandler))
 	mux.HandleFunc("/swagger/index.html", swaggerUIHandler)
 	mux.HandleFunc("/swagger/", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/swagger/index.html", http.StatusFound)
@@ -106,6 +108,42 @@ func corsMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+// protectedMiddleware wraps a handler with JWT verification
+func protectedMiddleware(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		authHeader := r.Header.Get("Authorization")
+		if authHeader == "" {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusUnauthorized)
+			json.NewEncoder(w).Encode(types.ErrorResponse{Error: "Missing authorization header"})
+			return
+		}
+
+		tokenString := ExtractTokenFromHeader(authHeader)
+		if tokenString == "" {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusUnauthorized)
+			json.NewEncoder(w).Encode(types.ErrorResponse{Error: "Invalid authorization format"})
+			return
+		}
+
+		claims, err := ValidateToken(tokenString)
+		if err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusForbidden)
+			json.NewEncoder(w).Encode(types.ErrorResponse{Error: "Invalid or expired token"})
+			return
+		}
+
+		// Store claims in context for use by handlers
+		ctx := r.Context()
+		ctx = context.WithValue(ctx, "user", claims)
+		r = r.WithContext(ctx)
+
+		next(w, r)
+	}
+}
+
 // swaggerJSONHandler serves a minimal dynamic swagger JSON
 func swaggerJSONHandler(w http.ResponseWriter, r *http.Request) {
 	proto := r.Header.Get("X-Forwarded-Proto")
@@ -118,12 +156,20 @@ func swaggerJSONHandler(w http.ResponseWriter, r *http.Request) {
     "schemes": %s,
     "swagger": "2.0",
     "info": {
-        "description": "A simple student management API with MongoDB",
+        "description": "A simple student management API with MongoDB and JWT authentication",
         "title": "Student Service API",
         "contact": {},
         "version": "1.0"
     },
     "basePath": "/",
+    "securityDefinitions": {
+        "BearerAuth": {
+            "type": "apiKey",
+            "name": "Authorization",
+            "in": "header",
+            "description": "JWT Authorization header using the Bearer scheme"
+        }
+    },
     "paths": {
         "/auth/register": {
             "post": {
@@ -152,18 +198,65 @@ func swaggerJSONHandler(w http.ResponseWriter, r *http.Request) {
                 }
             }
         },
+        "/auth/login": {
+            "post": {
+                "description": "Login with email and password to get JWT token",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": ["Auth"],
+                "summary": "Login and get JWT token",
+                "parameters": [
+                    {
+                        "description": "Login Request",
+                        "name": "loginRequest",
+                        "in": "body",
+                        "required": true,
+                        "schema": {"$ref": "#/definitions/LoginRequest"}
+                    }
+                ],
+                "responses": {
+                    "200": {"description": "OK", "schema": {"$ref": "#/definitions/LoginResponse"}},
+                    "400": {"description": "Bad Request", "schema": {"$ref": "#/definitions/ErrorResponse"}},
+                    "401": {"description": "Unauthorized", "schema": {"$ref": "#/definitions/ErrorResponse"}},
+                    "500": {"description": "Internal Server Error", "schema": {"$ref": "#/definitions/ErrorResponse"}}
+                }
+            }
+        },
+        "/auth/validate": {
+            "get": {
+                "description": "Validate JWT token and get user information",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": ["Auth"],
+                "summary": "Validate JWT token",
+                "security": [{"BearerAuth": []}],
+                "responses": {
+                    "200": {"description": "OK", "schema": {"$ref": "#/definitions/ValidateResponse"}},
+                    "401": {"description": "Unauthorized", "schema": {"$ref": "#/definitions/ErrorResponse"}},
+                    "403": {"description": "Forbidden", "schema": {"$ref": "#/definitions/ErrorResponse"}}
+                }
+            }
+        },
 		"/students/{id}": {
 			"get": {
 				"description": "Get student by ID",
 				"produces": ["application/json"],
 				"tags": ["Students"],
 				"summary": "Get student by ID",
+				"security": [{"BearerAuth": []}],
 				"parameters": [
 					{"name": "id", "in": "path", "required": true, "type": "string", "description": "Student ID", "default": "699df7593e8c1131b613628d"}
 				],
 				"responses": {
 					"200": {"description": "OK", "schema": {"$ref": "#/definitions/RegisterResponse"}},
 					"400": {"description": "Bad Request", "schema": {"$ref": "#/definitions/ErrorResponse"}},
+					"401": {"description": "Unauthorized", "schema": {"$ref": "#/definitions/ErrorResponse"}},
+					"403": {"description": "Forbidden", "schema": {"$ref": "#/definitions/ErrorResponse"}},
 					"404": {"description": "Not Found", "schema": {"$ref": "#/definitions/ErrorResponse"}}
 				}
 			},
@@ -173,6 +266,7 @@ func swaggerJSONHandler(w http.ResponseWriter, r *http.Request) {
 				"produces": ["application/json"],
 				"tags": ["Students"],
 				"summary": "Update student by ID",
+				"security": [{"BearerAuth": []}],
 				"parameters": [
 					{"name": "id", "in": "path", "required": true, "type": "string", "description": "Student ID", "default": "699df7593e8c1131b613628d"},
 					{"name": "student", "in": "body", "required": true, "schema": {"$ref": "#/definitions/RegisterRequest"}}
@@ -180,22 +274,26 @@ func swaggerJSONHandler(w http.ResponseWriter, r *http.Request) {
 				"responses": {
 					"200": {"description": "Updated", "schema": {"$ref": "#/definitions/RegisterResponse"}},
 					"400": {"description": "Bad Request", "schema": {"$ref": "#/definitions/ErrorResponse"}},
+					"401": {"description": "Unauthorized", "schema": {"$ref": "#/definitions/ErrorResponse"}},
+					"403": {"description": "Forbidden", "schema": {"$ref": "#/definitions/ErrorResponse"}},
 					"404": {"description": "Not Found", "schema": {"$ref": "#/definitions/ErrorResponse"}},
 					"500": {"description": "Internal Server Error", "schema": {"$ref": "#/definitions/ErrorResponse"}}
 				}
-			}
-		},
+			},
 			"delete": {
 				"description": "Delete a student by ID",
 				"produces": ["application/json"],
 				"tags": ["Students"],
 				"summary": "Delete student by ID",
+				"security": [{"BearerAuth": []}],
 				"parameters": [
 					{"name": "id", "in": "path", "required": true, "type": "string", "description": "Student ID", "default": "699df7593e8c1131b613628d"}
 				],
 				"responses": {
 					"204": {"description": "No Content"},
 					"400": {"description": "Bad Request", "schema": {"$ref": "#/definitions/ErrorResponse"}},
+					"401": {"description": "Unauthorized", "schema": {"$ref": "#/definitions/ErrorResponse"}},
+					"403": {"description": "Forbidden", "schema": {"$ref": "#/definitions/ErrorResponse"}},
 					"404": {"description": "Not Found", "schema": {"$ref": "#/definitions/ErrorResponse"}},
 					"500": {"description": "Internal Server Error", "schema": {"$ref": "#/definitions/ErrorResponse"}}
 				}
@@ -219,6 +317,18 @@ func swaggerJSONHandler(w http.ResponseWriter, r *http.Request) {
 				"phone": "1234567890"
 			}
         },
+        "LoginRequest": {
+			"type": "object",
+			"required": ["email", "password"],
+			"properties": {
+				"email": {"type": "string", "example": "student@example.com"},
+				"password": {"type": "string", "example": "password123"}
+			},
+			"example": {
+				"email": "student@example.com",
+				"password": "password123"
+			}
+        },
         "RegisterResponse": {
             "type": "object",
             "properties": {
@@ -226,6 +336,22 @@ func swaggerJSONHandler(w http.ResponseWriter, r *http.Request) {
                 "id": {"type": "string"},
                 "name": {"type": "string"},
                 "phone": {"type": "string"}
+            }
+        },
+        "LoginResponse": {
+            "type": "object",
+            "properties": {
+                "token": {"type": "string"},
+                "expiresIn": {"type": "string"},
+                "user": {"$ref": "#/definitions/RegisterResponse"}
+            }
+        },
+        "ValidateResponse": {
+            "type": "object",
+            "properties": {
+                "id": {"type": "string"},
+                "email": {"type": "string"},
+                "name": {"type": "string"}
             }
         },
         "ErrorResponse": {"type": "object", "properties": {"error": {"type": "string"}}}
@@ -491,5 +617,120 @@ func registerHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(response)
+}
+
+// loginHandler godoc
+// @Summary Login a student
+// @Description Authenticate a student with email and password, return JWT token
+// @Tags Auth
+// @Accept json
+// @Produce json
+// @Param loginRequest body types.LoginRequest true "Login Request"
+// @Success 200 {object} types.LoginResponse
+// @Failure 400 {object} types.ErrorResponse
+// @Failure 401 {object} types.ErrorResponse
+// @Failure 500 {object} types.ErrorResponse
+// @Router /auth/login [post]
+func loginHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		json.NewEncoder(w).Encode(types.ErrorResponse{Error: "Method Not Allowed"})
+		return
+	}
+
+	var req types.LoginRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(types.ErrorResponse{Error: "Invalid request body"})
+		return
+	}
+
+	// Validate required fields
+	if req.Email == "" || req.Password == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(types.ErrorResponse{Error: "Email and password are required"})
+		return
+	}
+
+	// Find student by email
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	collection := config.GetDB().Collection("students")
+	var student types.Student
+	err := collection.FindOne(ctx, bson.M{"email": req.Email}).Decode(&student)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(types.ErrorResponse{Error: "Invalid email or password"})
+		return
+	}
+
+	// Verify password (simple string comparison - in production, use bcrypt)
+	if student.Password != req.Password {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(types.ErrorResponse{Error: "Invalid email or password"})
+		return
+	}
+
+	// Generate JWT token
+	token, err := GenerateToken(student.ID.Hex(), student.Email, student.Name)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(types.ErrorResponse{Error: "Failed to generate token"})
+		return
+	}
+
+	response := types.LoginResponse{
+		Token: token,
+		User: types.RegisterResponse{
+			ID:    student.ID.Hex(),
+			Email: student.Email,
+			Name:  student.Name,
+			Phone: student.Phone,
+		},
+		ExpiresIn: "24h",
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(response)
+}
+
+// validateHandler godoc
+// @Summary Validate JWT token
+// @Description Validate a JWT token and return user information
+// @Tags Auth
+// @Security BearerAuth
+// @Produce json
+// @Success 200 {object} types.ValidateResponse
+// @Failure 401 {object} types.ErrorResponse
+// @Failure 403 {object} types.ErrorResponse
+// @Router /auth/validate [get]
+func validateHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		json.NewEncoder(w).Encode(types.ErrorResponse{Error: "Method Not Allowed"})
+		return
+	}
+
+	// Get user claims from context (set by protectedMiddleware)
+	claims := r.Context().Value("user").(*JWTClaims)
+
+	response := types.ValidateResponse{
+		ID:    claims.ID,
+		Email: claims.Email,
+		Name:  claims.Name,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(response)
 }
