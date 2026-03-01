@@ -10,9 +10,14 @@ echo "Student Service ↔ Enrollment Service"
 echo "=============================================="
 echo ""
 
-# Configuration
-STUDENT_SERVICE="http://localhost:5001"
-ENROLLMENT_SERVICE="http://localhost:5003"
+# Load environment configuration from .env file
+if [ -f .env ]; then
+    export $(cat .env | grep -v '^#' | xargs)
+fi
+
+# Configuration (defaults for local development)
+STUDENT_SERVICE="http://localhost:${SERVER_PORT:-5001}"
+ENROLLMENT_SERVICE="${ENROLLMENT_SERVICE_URL:-http://localhost:5003}"
 API_GATEWAY="http://localhost:8080"
 
 echo "📋 Prerequisites Check"

@@ -10,8 +10,13 @@ echo "Testing Register and Login Endpoints"
 echo "=============================================="
 echo ""
 
+# Load environment configuration from .env file
+if [ -f .env ]; then
+    export $(cat .env | grep -v '^#' | xargs)
+fi
+
 # Configuration
-BASE_URL="http://localhost:5001"
+BASE_URL="http://localhost:${SERVER_PORT:-5001}"
 TIMESTAMP=$(date +%s)
 
 # Colors for output
