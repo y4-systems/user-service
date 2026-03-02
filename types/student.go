@@ -8,6 +8,7 @@ type RegisterRequest struct {
 	Password string `json:"password" binding:"required,min=6"`
 	Name     string `json:"name" binding:"required"`
 	Phone    string `json:"phone" binding:"required"`
+	Role     string `json:"role"`
 }
 
 // LoginRequest represents the login request
@@ -45,6 +46,7 @@ type Student struct {
 	Password string        `bson:"password" json:"password"`
 	Name     string        `bson:"name" json:"name"`
 	Phone    string        `bson:"phone" json:"phone"`
+	Role     string        `bson:"role" json:"role"`
 }
 
 // ErrorResponse represents an error response

@@ -31,4 +31,7 @@ EXPOSE 8080
 # non-root user
 USER 1000:1000
 
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD wget --no-verbose --tries=1 --spider http://localhost:${SERVER_PORT}/health || exit 1
+
 CMD ["/app/student-service"]

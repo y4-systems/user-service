@@ -50,6 +50,12 @@ func main() {
 	loginRateLimiter.CleanupOldEntries(time.Hour)
 	fmt.Println("Rate limiter initialized: 5 login attempts per minute per IP")
 
+	// Get server port
+	port := os.Getenv("SERVER_PORT")
+	if port == "" {
+		port = "8080"
+	}
+
 	// Setup routes with CORS middleware
 	mux := http.NewServeMux()
 	// Serve documentation files from ./docs at /docs/
@@ -63,6 +69,14 @@ func main() {
 	mux.HandleFunc("/swagger/", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/swagger/index.html", http.StatusFound)
 	})
+
+	// Health check endpoint (accessible without auth/DB)
+	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprintf(w, `{"status":"ok","port":"%s"}`, port)
+	})
+
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/" {
 			w.Header().Set("Content-Type", "application/json")
@@ -74,12 +88,6 @@ func main() {
 
 	// Apply CORS middleware
 	handler := corsMiddleware(mux)
-
-	// Get server port
-	port := os.Getenv("SERVER_PORT")
-	if port == "" {
-		port = "8080"
-	}
 
 	fmt.Printf("Server is running on http://localhost:%s\n", port)
 	fmt.Printf("API Documentation available at http://localhost:%s/swagger/index.html\n", port)
@@ -105,12 +113,16 @@ func main() {
 
 func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Set CORS headers on all responses
 		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, PATCH, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, Accept, X-Requested-With, X-User-ID")
+		w.Header().Set("Access-Control-Max-Age", "86400") // 24 hours
+		w.Header().Set("Access-Control-Expose-Headers", "Content-Type, X-Total-Count")
 
-		// Handle preflight requests
+		// Handle preflight OPTIONS requests
 		if r.Method == http.MethodOptions {
+			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
 			return
 		}
@@ -688,19 +700,39 @@ func registerHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Validate and set role (default to "student" if not provided)
+	role := req.Role
+	if role == "" {
+		role = "student"
+	}
+	// Validate role value
+	if role != "student" && role != "admin" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(types.ErrorResponse{Error: "Invalid role. Must be 'student' or 'admin'"})
+		return
+	}
+
 	// Create student object
 	student := types.Student{
 		Email:    req.Email,
 		Password: string(hashedPassword),
 		Name:     req.Name,
 		Phone:    req.Phone,
+		Role:     role,
 	}
 
 	// Insert into MongoDB
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	collection := config.GetDB().Collection("students")
+	// Determine collection based on role
+	collectionName := "students"
+	if role == "admin" {
+		collectionName = "admins"
+	}
+
+	collection := config.GetDB().Collection(collectionName)
 	result, err := collection.InsertOne(ctx, student)
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
@@ -759,18 +791,26 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Find student by email
+	// Find student by email - check both students and admins collections
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	collection := config.GetDB().Collection("students")
 	var student types.Student
-	err := collection.FindOne(ctx, bson.M{"email": req.Email}).Decode(&student)
+	
+	// Try to find in students collection first
+	studentsCollection := config.GetDB().Collection("students")
+	err := studentsCollection.FindOne(ctx, bson.M{"email": req.Email}).Decode(&student)
+	
+	// If not found in students, try admins collection
 	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusUnauthorized)
-		json.NewEncoder(w).Encode(types.ErrorResponse{Error: "Invalid email or password"})
-		return
+		adminsCollection := config.GetDB().Collection("admins")
+		err = adminsCollection.FindOne(ctx, bson.M{"email": req.Email}).Decode(&student)
+		if err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusUnauthorized)
+			json.NewEncoder(w).Encode(types.ErrorResponse{Error: "Invalid email or password"})
+			return
+		}
 	}
 
 	// Verify password using bcrypt
@@ -782,8 +822,8 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Generate JWT token
-	token, err := GenerateToken(student.ID.Hex(), student.Email, student.Name)
+	// Generate JWT token with role from stored document
+	token, err := GenerateToken(student.ID.Hex(), student.Email, student.Name, student.Role)
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)

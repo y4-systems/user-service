@@ -13,6 +13,7 @@ type JWTClaims struct {
 	ID    string `json:"id"`
 	Email string `json:"email"`
 	Name  string `json:"name"`
+	Role  string `json:"role"`
 	jwt.RegisteredClaims
 }
 
@@ -26,12 +27,13 @@ func GetJWTSecret() string {
 }
 
 // GenerateToken creates a new JWT token for a student
-func GenerateToken(id, email, name string) (string, error) {
+func GenerateToken(id, email, name, role string) (string, error) {
 	secret := GetJWTSecret()
 	claims := JWTClaims{
 		ID:    id,
 		Email: email,
 		Name:  name,
+		Role:  role,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
