@@ -79,8 +79,8 @@ func main() {
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/" {
-			w.Header().Set("Content-Type", "application/json")
-			fmt.Fprintf(w, `{"message": "Hello, World!"}`)
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			fmt.Fprintf(w, `<html><body><h1>Student Service</h1><a href="/swagger/index.html">Open Swagger API Docs</a></body></html>`)
 		} else {
 			http.NotFound(w, r)
 		}
