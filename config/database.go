@@ -41,7 +41,7 @@ func InitMongoDB() error {
 func GetDB() *mongo.Database {
 	dbName := os.Getenv("MONGODB_DB")
 	if dbName == "" {
-		dbName = "student_service"
+		dbName = "usersdb"
 	}
 	return MongoDB.Database(dbName)
 }

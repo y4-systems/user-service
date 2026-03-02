@@ -87,7 +87,7 @@ Edit `.env` with your MongoDB connection:
 ```env
 # MongoDB Configuration
 MONGODB_URI=mongodb://localhost:27017
-MONGODB_DB=student_service
+MONGODB_DB=usersdb
 
 # Server Configuration
 SERVER_PORT=5001
@@ -133,7 +133,7 @@ go build -o student-service .
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `MONGODB_URI` | Required | MongoDB connection string |
-| `MONGODB_DB` | `student_service` | Database name |
+| `MONGODB_DB` | `usersdb` | Database name |
 | `SERVER_PORT` | `5001` | Service port |
 | `SERVER_ENV` | `development` | Environment (development/production) |
 | `JWT_SECRET` | Required | Secret for JWT signing (min 32 chars) |
@@ -375,7 +375,7 @@ docker build -t student-service:dev .
 docker run -d \
   -p 5001:5001 \
   -e MONGODB_URI='mongodb+srv://user:pass@cluster0...' \
-  -e MONGODB_DB=student_service \
+  -e MONGODB_DB=usersdb \
   -e SERVER_PORT=5001 \
   -e JWT_SECRET='your-strong-secret' \
   --name student-service \
