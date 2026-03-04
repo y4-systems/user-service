@@ -49,12 +49,12 @@ echo "----------------------------------------------"
 
 # Check if service is running
 if ! curl -s -f "$BASE_URL/" > /dev/null 2>&1; then
-    echo -e "${RED}❌ Student Service is not running on $BASE_URL${NC}"
+    echo -e "${RED}❌ User Service is not running on $BASE_URL${NC}"
     echo "Start with: go run main.go"
     exit 1
 fi
 
-echo -e "${GREEN}✅ Student Service is running${NC}"
+echo -e "${GREEN}✅ User Service is running${NC}"
 echo ""
 
 # Test data

@@ -1,6 +1,6 @@
 # Rate Limiter Test Suite
 
-This folder contains comprehensive tests for the rate limiting functionality of the Student Service.
+This folder contains comprehensive tests for the rate limiting functionality of the User Service.
 
 ## Test Files
 
@@ -163,7 +163,7 @@ chmod +x test/test_rate_limiter.sh
 
 ## Rate Limiter Configuration
 
-Current configuration in the Student Service:
+Current configuration in the User Service:
 
 - **Rate:** 5 requests per minute per IP
 - **Burst:** 1 (allows 1 immediate request)
@@ -179,7 +179,7 @@ This means:
 ## Troubleshooting
 
 ### Problem: "Connection refused"
-**Solution:** Make sure the Student Service is running
+**Solution:** Make sure the User Service is running
 ```bash
 cd /workspaces/user-service
 go run main.go

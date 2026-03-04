@@ -25,7 +25,7 @@ brew services start mongodb-community
 Create a `.env` file in the project root:
 ```env
 MONGODB_URI=mongodb://localhost:27017
-MONGODB_DB=student_service
+MONGODB_DB=userdb
 SERVER_PORT=8080
 SERVER_ENV=development
 ```
@@ -33,7 +33,7 @@ SERVER_ENV=development
 **For MongoDB Atlas (Cloud):**
 ```env
 MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net/?retryWrites=true&w=majority
-MONGODB_DB=student_service
+MONGODB_DB=userdb 
 ```
 
 ### 3. Run the Server
@@ -99,7 +99,7 @@ Each student document in the `students` collection contains:
 ### Using MongoDB Shell
 ```bash
 mongosh
-use student_service
+use user-service
 db.students.find()
 ```
 

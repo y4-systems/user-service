@@ -2,19 +2,19 @@
 
 ## Overview
 
-The Student Service demonstrates microservice integration by calling the Enrollment Service to fetch student enrollment data. This demonstrates how microservices communicate and share data across service boundaries in a distributed architecture.
+The User Service demonstrates microservice integration by calling the Enrollment Service to fetch student enrollment data. This demonstrates how microservices communicate and share data across service boundaries in a distributed architecture.
 
 ## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                   API Gateway (Port 8080)                       │
-│              Routes requests to Student Service                 │
+│              Routes requests to User Service                    │
 └────────────────────────────┬────────────────────────────────────┘
                              │
                              ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│            Student Service (Port 5001)                          │
+│            User Service (Port 5001)                             │
 ├─────────────────────────────────────────────────────────────────┤
 │  Storage: MongoDB (student data)                                │
 │  Endpoints:                                                     │

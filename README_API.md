@@ -1,4 +1,4 @@
-# Student Service API
+# User Service API
 
 A simple student management API built with Go.
 

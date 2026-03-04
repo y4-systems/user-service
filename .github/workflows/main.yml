@@ -1,4 +1,4 @@
-name: Student Service CI/CD
+name: User Service CI/CD
 
 on:
   push:

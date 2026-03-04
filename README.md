@@ -1,4 +1,4 @@
-# Student Service 🎓
+# User Service 🎓
 
 A production-ready Go microservice for student management with comprehensive security features, JWT authentication, and comprehensive testing.
 
@@ -42,7 +42,7 @@ A production-ready Go microservice for student management with comprehensive sec
                    │
                    ▼
 ┌─────────────────────────────────────────────────┐
-│    Student Service (Port 5001)                  │
+│    User Service (Port 5001)                     │
 ├─────────────────────────────────────────────────┤
 │ Routes:                                         │
 │  POST   /auth/register           → registerH    │
@@ -61,7 +61,7 @@ A production-ready Go microservice for student management with comprehensive sec
         └────────────────┘   └────────────────────┘
 ```
 
-**Microservice Integration:** The Student Service calls the Enrollment Service via HTTP to fetch enrollments for the `/students/{id}/enrollments` endpoint.
+**Microservice Integration:** The User Service calls the Enrollment Service via HTTP to fetch enrollments for the `/students/{id}/enrollments` endpoint.
 
 
 ## 📋 Requirements
@@ -290,7 +290,7 @@ Response: 200 OK
 
 ## 🔗 Microservice Integration
 
-The Student Service integrates with the **Enrollment Service** to provide comprehensive student information including course enrollments.
+The User Service integrates with the **Enrollment Service** to provide comprehensive student information including course enrollments.
 
 **Key Features:**
 - ✅ Synchronous HTTP/REST calls to Enrollment Service
@@ -443,9 +443,9 @@ Client
 API Gateway (Port 8080)
   ├─ Validates JWT
   ├─ Adds X-User-ID header
-  ├─ Routes to Student Service
+  ├─ Routes to User Service
   ↓
-Student Service (Port 5001)
+User Service (Port 5001)
   ├─ Receives X-User-ID
   ├─ Processes request
   ├─ Returns response
@@ -455,7 +455,7 @@ API Gateway (returns to client)
 
 **Environment:**
 ```bash
-STUDENT_SERVICE_URL=http://localhost:5001
+USER_SERVICE_URL=http://localhost:5001
 ```
 
 

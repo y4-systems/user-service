@@ -15,13 +15,13 @@ RUN go install github.com/swaggo/swag/cmd/swag@latest && \
     swag init
 
 # build static binary
-RUN go build -ldflags="-s -w" -o /app/student-service .
+RUN go build -ldflags="-s -w" -o /app/user-service .
 
 FROM alpine:3.18
 RUN apk add --no-cache ca-certificates
 
 WORKDIR /app
-COPY --from=builder /app/student-service /app/student-service
+COPY --from=builder /app/user-service /app/user-service
 # Include API docs and optional .env from the build context so the runtime image can serve /docs
 COPY --from=builder /src/docs /app/docs
 
@@ -34,4 +34,4 @@ USER 1000:1000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD wget --no-verbose --tries=1 --spider http://localhost:${SERVER_PORT}/health || exit 1
 
-CMD ["/app/student-service"]
+CMD ["/app/user-service"]
