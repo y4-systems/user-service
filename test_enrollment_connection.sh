@@ -13,7 +13,7 @@ if [ -f .env ]; then
 fi
 
 # Configuration
-STUDENT_SERVICE="http://localhost:${SERVER_PORT:-5001}"
+USER_SERVICE="http://localhost:${SERVER_PORT:-5001}"
 ENROLLMENT_SERVICE_URL="${ENROLLMENT_SERVICE_URL}"
 
 # Check if ENROLLMENT_SERVICE_URL is set
@@ -54,7 +54,7 @@ echo "----------------------------------------------"
 
 # Check User Service
 echo -n "Checking User Service (localhost:5001)... "
-if curl -s -f "$STUDENT_SERVICE/" > /dev/null 2>&1; then
+if curl -s -f "$USER_SERVICE/" > /dev/null 2>&1; then
     echo -e "${GREEN}✅${NC}"
     pass "User Service is running"
 else
@@ -85,7 +85,7 @@ TEST_PHONE="555-$(printf '%04d' $((RANDOM % 10000)))"
 
 info "Registering student: $TEST_EMAIL"
 
-REGISTER_RESPONSE=$(curl -s -X POST "$STUDENT_SERVICE/auth/register" \
+REGISTER_RESPONSE=$(curl -s -X POST "$USER_SERVICE/auth/register" \
   -H "Content-Type: application/json" \
   -d "{
     \"email\": \"$TEST_EMAIL\",
@@ -111,7 +111,7 @@ echo "----------------------------------------------"
 
 info "Logging in with email: $TEST_EMAIL"
 
-LOGIN_RESPONSE=$(curl -s -X POST "$STUDENT_SERVICE/auth/login" \
+LOGIN_RESPONSE=$(curl -s -X POST "$USER_SERVICE/auth/login" \
   -H "Content-Type: application/json" \
   -d "{
     \"email\": \"$TEST_EMAIL\",
@@ -138,7 +138,7 @@ echo ""
 
 ENROLLMENT_RESPONSE=$(curl -s -w "\n%{http_code}" \
   -H "Authorization: Bearer $TOKEN" \
-  "$STUDENT_SERVICE/students/$STUDENT_ID/enrollments")
+  "$USER_SERVICE/students/$STUDENT_ID/enrollments")
 
 HTTP_CODE=$(echo "$ENROLLMENT_RESPONSE" | tail -n1)
 RESPONSE_BODY=$(echo "$ENROLLMENT_RESPONSE" | sed '$d')
@@ -207,7 +207,7 @@ echo ""
 echo "🔍 Step 6: Connection Details"
 echo "----------------------------------------------"
 info "User Service Configuration:"
-echo "  - Base URL: $STUDENT_SERVICE"
+echo "  - Base URL: $USER_SERVICE"
 echo "  - Port: 5001"
 echo "  - Status: Running"
 echo ""

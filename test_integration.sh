@@ -16,7 +16,7 @@ if [ -f .env ]; then
 fi
 
 # Configuration (defaults for local development)
-STUDENT_SERVICE="http://localhost:${SERVER_PORT:-5001}"
+USER_SERVICE="http://localhost:${SERVER_PORT:-5001}"
 ENROLLMENT_SERVICE="${ENROLLMENT_SERVICE_URL:-http://localhost:5003}"
 API_GATEWAY="http://localhost:8080"
 
@@ -25,7 +25,7 @@ echo "----------------------------------------------"
 
 # Check if User Service is running
 echo -n "Checking User Service (port 5001)... "
-if curl -s -f "$STUDENT_SERVICE/" > /dev/null 2>&1; then
+if curl -s -f "$USER_SERVICE/" > /dev/null 2>&1; then
     echo "✅ Running"
 else
     echo "❌ Not running"
@@ -46,7 +46,7 @@ echo ""
 echo "🔐 Step 1: Register Test Student"
 echo "----------------------------------------------"
 
-REGISTER_RESPONSE=$(curl -s -X POST "$STUDENT_SERVICE/auth/register" \
+REGISTER_RESPONSE=$(curl -s -X POST "$USER_SERVICE/auth/register" \
   -H "Content-Type: application/json" \
   -d '{
     "email": "testuser_'$(date +%s)'@university.edu",
@@ -71,7 +71,7 @@ echo ""
 echo "🔑 Step 2: Login to Get JWT Token"
 echo "----------------------------------------------"
 
-LOGIN_RESPONSE=$(curl -s -X POST "$STUDENT_SERVICE/auth/login" \
+LOGIN_RESPONSE=$(curl -s -X POST "$USER_SERVICE/auth/login" \
   -H "Content-Type: application/json" \
   -d '{
     "email": "'$(echo "$REGISTER_RESPONSE" | jq -r '.email')'",
@@ -137,7 +137,7 @@ echo "GET /students/$STUDENT_ID/enrollments"
 echo ""
 
 INTEGRATION_RESPONSE=$(curl -s -H "Authorization: Bearer $TOKEN" \
-  "$STUDENT_SERVICE/students/$STUDENT_ID/enrollments")
+  "$USER_SERVICE/students/$STUDENT_ID/enrollments")
 
 echo "$INTEGRATION_RESPONSE" | jq '.'
 
