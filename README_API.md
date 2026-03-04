@@ -38,7 +38,7 @@ The server will start on `http://localhost:8080`
 
 ### 2. Register Student
 - **POST** `/auth/register`
-- Register a new student with the following JSON body:
+- Register a new user with the following JSON body:
 
 ```json
 {
@@ -71,7 +71,7 @@ The server will start on `http://localhost:8080`
 ### Using cURL
 
 ```bash
-# Register a new student
+# Register a new user
 curl -X POST http://localhost:8080/auth/register \
   -H "Content-Type: application/json" \
   -d '{

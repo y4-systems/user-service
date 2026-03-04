@@ -79,7 +79,7 @@ func main() {
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/" {
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-			fmt.Fprintf(w, `<html><body><h1>Student Service</h1><a href="/swagger/index.html">Open Swagger API Docs</a></body></html>`)
+			fmt.Fprintf(w, `<html><body><h1>User Service</h1><a href="/swagger/index.html">Open Swagger API Docs</a></body></html>`)
 		} else {
 			http.NotFound(w, r)
 		}
@@ -202,8 +202,8 @@ func swaggerJSONHandler(w http.ResponseWriter, r *http.Request) {
     "schemes": %s,
     "swagger": "2.0",
     "info": {
-        "description": "A simple student management API with MongoDB and JWT authentication",
-        "title": "Student Service API",
+        "description": "A simple user management API with MongoDB and JWT authentication",
+		"title": "User Service API",
         "contact": {},
         "version": "1.0"
     },
@@ -219,7 +219,7 @@ func swaggerJSONHandler(w http.ResponseWriter, r *http.Request) {
     "paths": {
         "/auth/register": {
             "post": {
-                "description": "Register a new student with email, password, name, and phone",
+                "description": "Register a user with email, password, name, and phone",
                 "consumes": [
                     "application/json"
                 ],
@@ -227,7 +227,7 @@ func swaggerJSONHandler(w http.ResponseWriter, r *http.Request) {
                     "application/json"
                 ],
                 "tags": ["Auth"],
-                "summary": "Register a new student",
+                "summary": "Register a new user",
                 "parameters": [
                     {
                         "description": "Register Request",
@@ -461,14 +461,222 @@ func swaggerUIHandler(w http.ResponseWriter, r *http.Request) {
     <head>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <title>Swagger UI</title>
+		<title>User Service Swagger UI</title>
         <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist/swagger-ui.css" />
+		<style>
+			body {
+				margin: 0;
+			}
+
+			.theme-toggle {
+				position: fixed;
+				top: 12px;
+				right: 12px;
+				z-index: 10000;
+				border: 1px solid #3b4151;
+				border-radius: 6px;
+				padding: 8px 12px;
+				cursor: pointer;
+				font-size: 14px;
+				background: #ffffff;
+				color: #3b4151;
+			}
+
+			body.dark-mode {
+				background: #111827;
+			}
+
+			body.dark-mode .theme-toggle {
+				background: #1f2937;
+				color: #e5e7eb;
+				border-color: #374151;
+			}
+
+			body.dark-mode .swagger-ui,
+			body.dark-mode .swagger-ui .wrapper,
+			body.dark-mode .swagger-ui .information-container,
+			body.dark-mode .swagger-ui .scheme-container,
+			body.dark-mode .swagger-ui .opblock,
+			body.dark-mode .swagger-ui .opblock .opblock-summary,
+			body.dark-mode .swagger-ui .opblock-section,
+			body.dark-mode .swagger-ui .opblock-section-header,
+			body.dark-mode .swagger-ui .responses-inner,
+			body.dark-mode .swagger-ui .responses-table,
+			body.dark-mode .swagger-ui table,
+			body.dark-mode .swagger-ui .model-box,
+			body.dark-mode .swagger-ui .tab,
+			body.dark-mode .swagger-ui .highlight-code,
+			body.dark-mode .swagger-ui .microlight,
+			body.dark-mode .swagger-ui .opblock-body pre,
+			body.dark-mode .swagger-ui textarea,
+			body.dark-mode .swagger-ui input,
+			body.dark-mode .swagger-ui select {
+				background: #1f2937 !important;
+				color: #e5e7eb !important;
+				border-color: #374151 !important;
+			}
+
+			body.dark-mode .swagger-ui .topbar {
+				background-color: #111827 !important;
+			}
+
+			body.dark-mode .swagger-ui,
+			body.dark-mode .swagger-ui .info .title,
+			body.dark-mode .swagger-ui .info p,
+			body.dark-mode .swagger-ui .info li,
+			body.dark-mode .swagger-ui .opblock-tag,
+			body.dark-mode .swagger-ui .opblock-summary-description,
+			body.dark-mode .swagger-ui .opblock-summary-path,
+			body.dark-mode .swagger-ui .opblock-summary-method,
+			body.dark-mode .swagger-ui .opblock-section-header h4,
+			body.dark-mode .swagger-ui .opblock-section-header label,
+			body.dark-mode .swagger-ui .parameter__name,
+			body.dark-mode .swagger-ui .parameter__type,
+			body.dark-mode .swagger-ui .parameter__deprecated,
+			body.dark-mode .swagger-ui .parameter__in,
+			body.dark-mode .swagger-ui .response-col_status,
+			body.dark-mode .swagger-ui .response-col_description,
+			body.dark-mode .swagger-ui .response-col_description__inner,
+			body.dark-mode .swagger-ui .model-title,
+			body.dark-mode .swagger-ui .model,
+			body.dark-mode .swagger-ui .prop-name,
+			body.dark-mode .swagger-ui .prop-type,
+			body.dark-mode .swagger-ui .btn,
+			body.dark-mode .swagger-ui label,
+			body.dark-mode .swagger-ui h1,
+			body.dark-mode .swagger-ui h2,
+			body.dark-mode .swagger-ui h3,
+			body.dark-mode .swagger-ui h4,
+			body.dark-mode .swagger-ui h5,
+			body.dark-mode .swagger-ui h6,
+			body.dark-mode .swagger-ui span,
+			body.dark-mode .swagger-ui td,
+			body.dark-mode .swagger-ui th,
+			body.dark-mode .swagger-ui p,
+			body.dark-mode .swagger-ui a {
+				color: #e5e7eb !important;
+			}
+
+			body.dark-mode .swagger-ui .opblock.opblock-get,
+			body.dark-mode .swagger-ui .opblock.opblock-post,
+			body.dark-mode .swagger-ui .opblock.opblock-put,
+			body.dark-mode .swagger-ui .opblock.opblock-delete,
+			body.dark-mode .swagger-ui .opblock.opblock-patch {
+				border-color: #374151 !important;
+			}
+
+			body.dark-mode .swagger-ui .microlight span,
+			body.dark-mode .swagger-ui .highlight-code span,
+			body.dark-mode .swagger-ui pre,
+			body.dark-mode .swagger-ui code,
+			body.dark-mode .swagger-ui .markdown code {
+				color: #e5e7eb !important;
+			}
+
+			body.dark-mode .swagger-ui .btn.execute {
+				border-color: #60a5fa !important;
+				color: #60a5fa !important;
+				background: #1f2937 !important;
+			}
+
+			body.dark-mode .swagger-ui .try-out__btn,
+			body.dark-mode .swagger-ui .btn.try-out__btn,
+			body.dark-mode .swagger-ui .btn.cancel,
+			body.dark-mode .swagger-ui .btn.clear,
+			body.dark-mode .swagger-ui .btn.authorize,
+			body.dark-mode .swagger-ui .opblock-control-arrow {
+				color: #e5e7eb !important;
+				border-color: #4b5563 !important;
+				background: #1f2937 !important;
+			}
+
+			body.dark-mode .swagger-ui .parameters-col_description input::placeholder,
+			body.dark-mode .swagger-ui textarea::placeholder {
+				color: #9ca3af !important;
+			}
+
+			body.dark-mode .swagger-ui .dialog-ux .modal-ux,
+			body.dark-mode .swagger-ui .dialog-ux .modal-ux-content,
+			body.dark-mode .swagger-ui .dialog-ux .modal-ux-header,
+			body.dark-mode .swagger-ui .dialog-ux .modal-ux-body,
+			body.dark-mode .swagger-ui .dialog-ux .auth-container,
+			body.dark-mode .swagger-ui .dialog-ux .scope-def {
+				background: #1f2937 !important;
+				color: #e5e7eb !important;
+				border-color: #374151 !important;
+			}
+
+			body.dark-mode .swagger-ui .dialog-ux .modal-ux-header h3,
+			body.dark-mode .swagger-ui .dialog-ux .auth-container h4,
+			body.dark-mode .swagger-ui .dialog-ux .auth-container p,
+			body.dark-mode .swagger-ui .dialog-ux label,
+			body.dark-mode .swagger-ui .dialog-ux .scopes h2,
+			body.dark-mode .swagger-ui .dialog-ux .scope-def,
+			body.dark-mode .swagger-ui .dialog-ux .scope-def span,
+			body.dark-mode .swagger-ui .dialog-ux .errors-wrapper,
+			body.dark-mode .swagger-ui .dialog-ux .markdown p,
+			body.dark-mode .swagger-ui .dialog-ux .markdown code {
+				color: #e5e7eb !important;
+			}
+
+			body.dark-mode .swagger-ui .dialog-ux input[type=text],
+			body.dark-mode .swagger-ui .dialog-ux input[type=password] {
+				background: #111827 !important;
+				color: #e5e7eb !important;
+				border: 1px solid #4b5563 !important;
+			}
+
+			body.dark-mode .swagger-ui .dialog-ux .btn,
+			body.dark-mode .swagger-ui .dialog-ux .btn.modal-btn {
+				background: #1f2937 !important;
+				color: #e5e7eb !important;
+				border-color: #4b5563 !important;
+			}
+
+			body.dark-mode .swagger-ui .dialog-ux .btn.authorize {
+				color: #60a5fa !important;
+				border-color: #60a5fa !important;
+			}
+
+			body.dark-mode .swagger-ui .dialog-ux .close-modal {
+				color: #e5e7eb !important;
+			}
+
+			body.dark-mode .swagger-ui a {
+				color: #93c5fd !important;
+			}
+		</style>
     </head>
     <body>
+		<button id="theme-toggle" class="theme-toggle" type="button">🌙 Dark</button>
         <div id="swagger-ui"></div>
         <script src="https://unpkg.com/swagger-ui-dist/swagger-ui-bundle.js"></script>
         <script>
+			function applyTheme(theme) {
+				const dark = theme === 'dark';
+				document.body.classList.toggle('dark-mode', dark);
+				const btn = document.getElementById('theme-toggle');
+				if (btn) {
+					btn.textContent = dark ? '☀️ Light' : '🌙 Dark';
+				}
+			}
+
+			function getInitialTheme() {
+				const saved = localStorage.getItem('swagger-theme');
+				if (saved === 'dark' || saved === 'light') return saved;
+				return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+			}
+
             window.onload = function() {
+				let theme = getInitialTheme();
+				applyTheme(theme);
+
+				document.getElementById('theme-toggle').addEventListener('click', function() {
+					theme = theme === 'dark' ? 'light' : 'dark';
+					localStorage.setItem('swagger-theme', theme);
+					applyTheme(theme);
+				});
+
 				const ui = SwaggerUIBundle({
 					url: window.location.origin + '/swagger.json',
                     dom_id: '#swagger-ui',
@@ -664,8 +872,10 @@ func deleteStudent(ctx context.Context, collection interface{}, oid primitive.Ob
 }
 
 // registerHandler godoc
-// @Summary Register a new student
-// @Description Register a new student with email, password, name, and phone
+// @Summary Register a new user Available authorizations
+
+
+// @Description Register a new user with email, password, name, and phone
 // @Tags Auth
 // @Accept json
 // @Produce json
