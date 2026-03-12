@@ -3,14 +3,15 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
+	"reflect"
 	"strings"
 	"syscall"
 	"time"
-	"reflect"
 
 	"github.com/joho/godotenv"
 	"github.com/y4-systems/user-service/config"
@@ -52,7 +53,7 @@ func main() {
 	// Get server port
 	port := os.Getenv("SERVER_PORT")
 	if port == "" {
-		port = "8080"
+		port = "5001"
 	}
 
 	// Setup routes with CORS middleware
@@ -60,6 +61,7 @@ func main() {
 	// Serve documentation files from ./docs at /docs/
 	mux.Handle("/docs/", http.StripPrefix("/docs/", http.FileServer(http.Dir("./docs"))))
 	mux.HandleFunc("/swagger.json", swaggerJSONHandler)
+	mux.HandleFunc("/students", protectedMiddleware(studentsHandler))
 	mux.HandleFunc("/students/", protectedMiddleware(studentsHandler))
 	mux.HandleFunc("/auth/register", registerHandler)
 	mux.HandleFunc("/auth/login", rateLimitMiddleware(loginHandler))
@@ -171,10 +173,10 @@ func rateLimitMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Get client IP address
 		ip := GetIPAddress(r)
-		
+
 		// Get rate limiter for this IP
 		limiter := loginRateLimiter.GetLimiter(ip)
-		
+
 		// Check if request is allowed
 		if !limiter.Allow() {
 			w.Header().Set("Content-Type", "application/json")
@@ -184,7 +186,7 @@ func rateLimitMiddleware(next http.HandlerFunc) http.HandlerFunc {
 			})
 			return
 		}
-		
+
 		// Request is allowed, proceed to next handler
 		next(w, r)
 	}
@@ -722,15 +724,63 @@ func objectIDToHex(id interface{}) string {
 	return fmt.Sprintf("%v", id)
 }
 
-// studentsHandler handles GET and PUT for /students/{id}
+// studentsHandler handles GET /students/ (list) and GET/PUT/DELETE /students/{id}
 func studentsHandler(w http.ResponseWriter, r *http.Request) {
 	// extract id from path /students/{id}
 	path := r.URL.Path
-	id := strings.TrimPrefix(path, "/students/")
+	// Strip /students or /students/ prefix, then remove leading slash to get bare id
+	id := strings.TrimPrefix(strings.TrimPrefix(path, "/students"), "/")
+	// Normalise: treat "/" (trailing-slash-only) as empty (list request)
+	if id == "/" {
+		id = ""
+	}
+
+	// No ID supplied → list all students (admin only)
 	if id == "" {
+		if r.Method != http.MethodGet {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			json.NewEncoder(w).Encode(types.ErrorResponse{Error: "Method Not Allowed"})
+			return
+		}
+		claims, ok := r.Context().Value("user").(*JWTClaims)
+		if !ok || claims == nil || claims.Role != "admin" {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusForbidden)
+			json.NewEncoder(w).Encode(types.ErrorResponse{Error: "Admin access required"})
+			return
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		collection := config.GetDB().Collection("students")
+		cursor, err := collection.Find(ctx, bson.M{})
+		if err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(types.ErrorResponse{Error: "Failed to list students"})
+			return
+		}
+		defer cursor.Close(ctx)
+		var results []types.RegisterResponse
+		for cursor.Next(ctx) {
+			var s types.Student
+			if err := cursor.Decode(&s); err != nil {
+				continue
+			}
+			results = append(results, types.RegisterResponse{
+				ID:        s.ID.Hex(),
+				StudentID: s.StudentID,
+				Email:     s.Email,
+				Name:      s.Name,
+				Phone:     s.Phone,
+			})
+		}
+		if results == nil {
+			results = []types.RegisterResponse{}
+		}
 		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(types.ErrorResponse{Error: "Missing student id"})
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(results)
 		return
 	}
 
@@ -755,22 +805,22 @@ func studentsHandler(w http.ResponseWriter, r *http.Request) {
 	collection := config.GetDB().Collection("students")
 
 	switch r.Method {
-		case http.MethodDelete:
-			deleted, err := deleteStudent(ctx, collection, oid)
-			if err != nil {
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusInternalServerError)
-				json.NewEncoder(w).Encode(types.ErrorResponse{Error: "Failed to delete student"})
-				return
-			}
-			if deleted == 0 {
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusNotFound)
-				json.NewEncoder(w).Encode(types.ErrorResponse{Error: "Student not found"})
-				return
-			}
-			w.WriteHeader(http.StatusNoContent)
+	case http.MethodDelete:
+		deleted, err := deleteStudent(ctx, collection, oid)
+		if err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(types.ErrorResponse{Error: "Failed to delete student"})
 			return
+		}
+		if deleted == 0 {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusNotFound)
+			json.NewEncoder(w).Encode(types.ErrorResponse{Error: "Student not found"})
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+		return
 	case http.MethodGet:
 		var student types.Student
 		err = collection.FindOne(ctx, bson.M{"_id": oid}).Decode(&student)
@@ -781,10 +831,11 @@ func studentsHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		resp := types.RegisterResponse{
-			ID:    student.ID.Hex(),
-			Email: student.Email,
-			Name:  student.Name,
-			Phone: student.Phone,
+			ID:        student.ID.Hex(),
+			StudentID: student.StudentID,
+			Email:     student.Email,
+			Name:      student.Name,
+			Phone:     student.Phone,
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
@@ -844,10 +895,11 @@ func studentsHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		resp := types.RegisterResponse{
-			ID:    student.ID.Hex(),
-			Email: student.Email,
-			Name:  student.Name,
-			Phone: student.Phone,
+			ID:        student.ID.Hex(),
+			StudentID: student.StudentID,
+			Email:     student.Email,
+			Name:      student.Name,
+			Phone:     student.Phone,
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
@@ -873,7 +925,6 @@ func deleteStudent(ctx context.Context, collection interface{}, oid primitive.Ob
 
 // registerHandler godoc
 // @Summary Register a new user Available authorizations
-
 
 // @Description Register a new user with email, password, name, and phone
 // @Tags Auth
@@ -930,18 +981,39 @@ func registerHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Create student object
-	student := types.Student{
-		Email:    req.Email,
-		Password: string(hashedPassword),
-		Name:     req.Name,
-		Phone:    req.Phone,
-		Role:     role,
-	}
-
 	// Insert into MongoDB
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+
+	studentID := ""
+	if role == "student" {
+		studentID, err = resolveUniqueStudentID(ctx, config.GetDB(), req.StudentID)
+		if err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			switch {
+			case errors.Is(err, errInvalidStudentID):
+				w.WriteHeader(http.StatusBadRequest)
+				json.NewEncoder(w).Encode(types.ErrorResponse{Error: "Invalid student ID format. Use 3-32 chars: letters, numbers, hyphen."})
+			case errors.Is(err, errStudentIDExists):
+				w.WriteHeader(http.StatusConflict)
+				json.NewEncoder(w).Encode(types.ErrorResponse{Error: "Student ID already exists"})
+			default:
+				w.WriteHeader(http.StatusInternalServerError)
+				json.NewEncoder(w).Encode(types.ErrorResponse{Error: "Failed to generate student ID"})
+			}
+			return
+		}
+	}
+
+	// Create student object
+	student := types.Student{
+		Email:     req.Email,
+		Password:  string(hashedPassword),
+		Name:      req.Name,
+		Phone:     req.Phone,
+		Role:      role,
+		StudentID: studentID,
+	}
 
 	// Determine collection based on role
 	collectionName := "students"
@@ -961,10 +1033,11 @@ func registerHandler(w http.ResponseWriter, r *http.Request) {
 	// Return response with inserted ID (handle multiple possible ID types)
 	idHex := objectIDToHex(result.InsertedID)
 	response := types.RegisterResponse{
-		ID:    idHex,
-		Email: req.Email,
-		Name:  req.Name,
-		Phone: req.Phone,
+		ID:        idHex,
+		StudentID: studentID,
+		Email:     req.Email,
+		Name:      req.Name,
+		Phone:     req.Phone,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -1013,11 +1086,11 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 
 	var student types.Student
-	
+
 	// Try to find in students collection first
 	studentsCollection := config.GetDB().Collection("students")
 	err := studentsCollection.FindOne(ctx, bson.M{"email": req.Email}).Decode(&student)
-	
+
 	// If not found in students, try admins collection
 	if err != nil {
 		adminsCollection := config.GetDB().Collection("admins")
@@ -1051,10 +1124,11 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 	response := types.LoginResponse{
 		Token: token,
 		User: types.RegisterResponse{
-			ID:    student.ID.Hex(),
-			Email: student.Email,
-			Name:  student.Name,
-			Phone: student.Phone,
+			ID:        student.ID.Hex(),
+			StudentID: student.StudentID,
+			Email:     student.Email,
+			Name:      student.Name,
+			Phone:     student.Phone,
 		},
 		ExpiresIn: "24h",
 	}
@@ -1208,4 +1282,3 @@ func studentEnrollmentsHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(response)
 }
-

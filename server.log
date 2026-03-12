@@ -1,4 +1,5 @@
 nohup: ignoring input
 Successfully connected to MongoDB
-Server is running on http://localhost:8080
-API Documentation available at http://localhost:8080/swagger/index.html
+Rate limiter initialized: 5 login attempts per minute per IP
+Server is running on http://localhost:5001
+API Documentation available at http://localhost:5001/swagger/index.html
